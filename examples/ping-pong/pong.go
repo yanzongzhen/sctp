@@ -7,7 +7,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/pion/sctp"
+	"github.com/yanzongzhen/sctp"
 )
 
 func main() {

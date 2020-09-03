@@ -1,12 +1,12 @@
 package sctp
 
 import (
-	"log"
-	"net"
-
 	"github.com/pion/logging"
 	"github.com/pion/udp"
 	"github.com/pkg/errors"
+	"log"
+	"net"
+	"sync"
 )
 
 // ListenAssociation creates a SCTP association listener.
@@ -97,6 +97,7 @@ func (lc *ListenConfig) Listen(network string, laddr *net.UDPAddr) (net.Listener
 		config:   *lc.Config,
 		parent:   parent,
 		acceptCh: make(chan *Stream),
+		closeCh:  make(chan bool),
 	}
 
 	go l.acceptAssociationLoop()
@@ -112,7 +113,7 @@ func (l *listener) acceptAssociationLoop() {
 		if err != nil {
 			// TODO: Error handling
 			log.Printf("acceptAssociationLoop Error: %v", err)
-			return
+			break
 		}
 
 		go l.acceptStreamLoop(a)
@@ -126,18 +127,18 @@ func (l *listener) acceptStreamLoop(a *Association) {
 		if err != nil {
 			log.Printf("acceptStreamLoop Error: %v", err)
 			// TODO: Error handling
-			return
+			break
 		}
-
 		l.acceptCh <- s
 	}
 }
 
 type listener struct {
-	config Config
-	parent *AssociationListener
-
+	config   Config
+	parent   *AssociationListener
 	acceptCh chan *Stream
+	closeCh  chan bool
+	mutex    sync.RWMutex
 }
 
 var _ net.Listener = (*listener)(nil)
@@ -145,6 +146,7 @@ var _ net.Listener = (*listener)(nil)
 // Accept waits for and returns the next stream to the listener.
 // You have to either close or read on all connection that are created.
 func (l *listener) Accept() (net.Conn, error) {
+	defer close(l.closeCh)
 	s, ok := <-l.acceptCh
 
 	if !ok {
@@ -157,7 +159,9 @@ func (l *listener) Accept() (net.Conn, error) {
 // Any blocked Accept operations will be unblocked and return errors.
 // Already Accepted connections are not closed.
 func (l *listener) Close() error {
-	return l.parent.Close()
+	err := l.parent.Close()
+	l.closeCh <- true
+	return err
 }
 
 // Addr returns the listener's network address.
