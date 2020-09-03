@@ -1,6 +1,7 @@
 package sctp
 
 import (
+	"log"
 	"net"
 
 	"github.com/pion/logging"
@@ -110,6 +111,7 @@ func (l *listener) acceptAssociationLoop() {
 		a, err := l.parent.Accept()
 		if err != nil {
 			// TODO: Error handling
+			log.Printf("acceptAssociationLoop Error: %v", err)
 			return
 		}
 
@@ -122,6 +124,7 @@ func (l *listener) acceptStreamLoop(a *Association) {
 	for {
 		s, err := a.AcceptStream()
 		if err != nil {
+			log.Printf("acceptStreamLoop Error: %v", err)
 			// TODO: Error handling
 			return
 		}

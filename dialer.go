@@ -12,6 +12,13 @@ func Dial(network string, raddr *net.UDPAddr, streamIdentifier uint16) (*Stream,
 	return (&Dialer{}).Dial(network, raddr, streamIdentifier)
 }
 
+// func new Dial
+func NewDialer(unordered bool, relType byte, relVal uint32) *Dialer {
+	cfg := &Reliability{unordered: unordered, reliabilityType: relType, reliabilityValue: relVal}
+	d := &Dialer{ReliabilityConfig: cfg}
+	return d
+}
+
 // A Dialer contains options for connecting to an address.
 //
 // The zero value for each field is equivalent to dialing without that option.
@@ -25,6 +32,15 @@ type Dialer struct {
 
 	// Config holds common config
 	Config *Config
+
+	//Stream Reliability Config
+	ReliabilityConfig *Reliability
+}
+
+type Reliability struct {
+	unordered        bool
+	reliabilityType  byte
+	reliabilityValue uint32
 }
 
 // Dial connects to the given network address and establishes a
@@ -40,5 +56,7 @@ func (d *Dialer) Dial(network string, raddr *net.UDPAddr, streamIdentifier uint1
 		return nil, err
 	}
 
-	return a.OpenStream(streamIdentifier, d.PayloadType)
+	s, err := a.OpenStream(streamIdentifier, d.PayloadType)
+	s.SetReliabilityParams(d.ReliabilityConfig.unordered, d.ReliabilityConfig.reliabilityType, d.ReliabilityConfig.reliabilityValue)
+	return s, err
 }
