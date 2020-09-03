@@ -146,7 +146,6 @@ var _ net.Listener = (*listener)(nil)
 // Accept waits for and returns the next stream to the listener.
 // You have to either close or read on all connection that are created.
 func (l *listener) Accept() (net.Conn, error) {
-	defer close(l.closeCh)
 	s, ok := <-l.acceptCh
 
 	if !ok {
@@ -160,7 +159,6 @@ func (l *listener) Accept() (net.Conn, error) {
 // Already Accepted connections are not closed.
 func (l *listener) Close() error {
 	err := l.parent.Close()
-	l.closeCh <- true
 	return err
 }
 
