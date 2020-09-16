@@ -1927,9 +1927,10 @@ func (a *Association) checkPartialReliabilityStatus(c *chunkPayloadData) {
 			}
 		}
 		s.lock.RUnlock()
-	} else {
-		a.log.Errorf("[%s] stream %d not found)", a.name, c.streamIdentifier)
 	}
+	// else {
+	// 	a.log.Errorf("[%s] stream %d not found)", a.name, c.streamIdentifier)
+	// }
 }
 
 // getDataPacketsToRetransmit is called when T3-rtx is timed out and retransmit outstanding data chunks
