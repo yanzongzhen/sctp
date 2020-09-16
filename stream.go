@@ -41,6 +41,12 @@ type Stream struct {
 	name                string
 }
 
+func (s *Stream) String() string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return string(s.streamIdentifier) + s.name
+}
+
 // StreamIdentifier returns the Stream identifier associated to the stream.
 func (s *Stream) StreamIdentifier() uint16 {
 	s.lock.RLock()

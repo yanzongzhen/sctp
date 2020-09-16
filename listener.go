@@ -1,12 +1,12 @@
 package sctp
 
 import (
+	"net"
+	"sync"
+
 	"github.com/pion/logging"
 	"github.com/pion/udp"
 	"github.com/pkg/errors"
-	"log"
-	"net"
-	"sync"
 )
 
 // ListenAssociation creates a SCTP association listener.
@@ -88,34 +88,38 @@ func (lc *ListenConfig) Listen(network string, laddr *net.UDPAddr) (net.Listener
 	if err != nil {
 		return nil, err
 	}
+
 	if lc.Config == nil {
 		lc.Config = &Config{
 			LoggerFactory: logging.NewDefaultLoggerFactory(),
 		}
 	}
+
 	l := &listener{
-		config:   *lc.Config,
-		parent:   parent,
-		acceptCh: make(chan *Stream),
-		closeCh:  make(chan bool),
+		config:    *lc.Config,
+		parent:    parent,
+		acceptCh:  make(chan *Stream),
+		closeCh:   make(chan struct{}),
+		serverMap: make(map[string]*Stream),
 	}
 
-	go l.acceptAssociationLoop()
+	go l.run()
 
 	return l, nil
 }
 
-func (l *listener) acceptAssociationLoop() {
+func (l *listener) run() {
+	defer close(l.closeCh)
+	defer close(l.acceptCh)
+
 	// TODO: Shutdown
 	for {
 		// TODO: Cleanup association when closing the last stream and/or listener.
 		a, err := l.parent.Accept()
 		if err != nil {
 			// TODO: Error handling
-			log.Printf("acceptAssociationLoop Error: %v", err)
-			break
+			return
 		}
-
 		go l.acceptStreamLoop(a)
 	}
 }
@@ -125,20 +129,37 @@ func (l *listener) acceptStreamLoop(a *Association) {
 	for {
 		s, err := a.AcceptStream()
 		if err != nil {
-			log.Printf("acceptStreamLoop Error: %v", err)
 			// TODO: Error handling
+			return
+		}
+		l.saveConn(s)
+	}
+}
+
+func (l *listener) saveConn(s *Stream) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	_, ok := l.serverMap[s.String()]
+	if !ok {
+		select {
+		case l.acceptCh <- s:
+			l.serverMap[s.String()] = s
+			break
+		default:
 			break
 		}
-		l.acceptCh <- s
 	}
 }
 
 type listener struct {
-	config   Config
-	parent   *AssociationListener
-	acceptCh chan *Stream
-	closeCh  chan bool
-	mutex    sync.RWMutex
+	config Config
+	parent *AssociationListener
+
+	serverMap map[string]*Stream
+	acceptCh  chan *Stream
+
+	closeCh chan struct{}
+	mutex   sync.RWMutex
 }
 
 var _ net.Listener = (*listener)(nil)
@@ -158,8 +179,13 @@ func (l *listener) Accept() (net.Conn, error) {
 // Any blocked Accept operations will be unblocked and return errors.
 // Already Accepted connections are not closed.
 func (l *listener) Close() error {
-	err := l.parent.Close()
-	return err
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	for k, v := range l.serverMap {
+		v.Close()
+		delete(l.serverMap, k)
+	}
+	return l.parent.Close()
 }
 
 // Addr returns the listener's network address.
